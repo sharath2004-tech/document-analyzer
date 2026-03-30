@@ -1,0 +1,40 @@
+services:
+  # Python backend
+  backend:
+    build: .
+    ports:
+      - "8000:8000"
+    env_file:
+      - .env
+    volumes:
+      - ./uploads:/app/uploads
+    depends_on:
+      - ollama
+    restart: unless-stopped
+
+  # Ollama for local LLM fallback
+  ollama:
+    image: ollama/ollama:latest
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama_data:/root/.ollama
+    restart: unless-stopped
+    deploy:
+      resources:
+        reservations:
+          memory: 4G
+
+  # Auto-pull phi3 model on startup
+  ollama-init:
+    image: ollama/ollama:latest
+    depends_on:
+      - ollama
+    entrypoint: >
+      sh -c "sleep 10 && ollama pull phi3"
+    environment:
+      - OLLAMA_HOST=ollama:11434
+    restart: "no"
+
+volumes:
+  ollama_data:
