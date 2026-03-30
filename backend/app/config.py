@@ -2,7 +2,9 @@ import os
 from pathlib import Path
 from dotenv import load_dotenv
 
-load_dotenv()
+# Explicitly load .env from the backend directory
+_backend_dir = Path(__file__).resolve().parent.parent
+load_dotenv(_backend_dir / ".env")
 
 
 class Settings:
@@ -31,6 +33,10 @@ class Settings:
 
     # CORS
     CORS_ORIGINS: list[str] = os.getenv("CORS_ORIGINS", "http://localhost:5173,http://localhost:3000").split(",")
+
+    # MongoDB
+    MONGODB_URL: str = os.getenv("MONGODB_URI", os.getenv("MONGODB_URL", "mongodb://localhost:27017"))
+    MONGODB_DB_NAME: str = os.getenv("MONGODB_DB_NAME", "document_analyzer")
 
     # JWT
     JWT_SECRET: str = os.getenv("JWT_SECRET", "dev-secret-change-in-production")

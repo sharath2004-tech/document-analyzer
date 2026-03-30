@@ -1,10 +1,14 @@
 """LLM service with OpenRouter (primary), Groq (alt), and Ollama (fallback)."""
 
 import httpx
+import asyncio
 import logging
 from app.config import settings
 
 logger = logging.getLogger(__name__)
+
+# Limit concurrent LLM calls to avoid rate limiting on free-tier providers
+_llm_semaphore = asyncio.Semaphore(1)
 
 
 async def _call_openai_compatible(
@@ -33,14 +37,22 @@ async def _call_openai_compatible(
     }
 
     async with httpx.AsyncClient(timeout=120.0) as client:
-        resp = await client.post(
-            f"{base_url}/chat/completions",
-            json=payload,
-            headers=headers,
-        )
-        resp.raise_for_status()
-        data = resp.json()
-        return data["choices"][0]["message"]["content"]
+        for attempt in range(3):
+            resp = await client.post(
+                f"{base_url}/chat/completions",
+                json=payload,
+                headers=headers,
+            )
+            if resp.status_code == 429:
+                wait = 2 ** attempt
+                logger.warning(f"Rate limited by {base_url}, retrying in {wait}s...")
+                await asyncio.sleep(wait)
+                continue
+            resp.raise_for_status()
+            data = resp.json()
+            return data["choices"][0]["message"]["content"]
+        resp.raise_for_status()  # raise after all retries exhausted
+        return resp.json()["choices"][0]["message"]["content"]
 
 
 async def _call_openrouter(messages: list[dict], **kwargs) -> str:
@@ -73,6 +85,7 @@ async def _call_ollama(messages: list[dict], **kwargs) -> str:
         api_key="",
         model=settings.OLLAMA_MODEL,
         messages=messages,
+        extra_headers={"ngrok-skip-browser-warning": "true"},
         **kwargs,
     )
 
@@ -91,38 +104,39 @@ async def call_llm(
     max_tokens: int = 4096,
 ) -> str:
     """Call LLM with automatic fallback through configured providers."""
-    last_error = None
+    async with _llm_semaphore:
+        last_error = None
 
-    for provider_name in settings.LLM_PRIORITY:
-        provider_name = provider_name.strip()
-        provider_fn = _PROVIDERS.get(provider_name)
-        if not provider_fn:
-            logger.warning(f"Unknown LLM provider: {provider_name}")
-            continue
+        for provider_name in settings.LLM_PRIORITY:
+            provider_name = provider_name.strip()
+            provider_fn = _PROVIDERS.get(provider_name)
+            if not provider_fn:
+                logger.warning(f"Unknown LLM provider: {provider_name}")
+                continue
 
-        # Skip providers without API keys
-        if provider_name == "openrouter" and not settings.OPENROUTER_API_KEY:
-            continue
-        if provider_name == "groq" and not settings.GROQ_API_KEY:
-            continue
+            # Skip providers without API keys
+            if provider_name == "openrouter" and not settings.OPENROUTER_API_KEY:
+                continue
+            if provider_name == "groq" and not settings.GROQ_API_KEY:
+                continue
 
-        try:
-            logger.info(f"Trying LLM provider: {provider_name}")
-            result = await provider_fn(
-                messages=messages,
-                temperature=temperature,
-                max_tokens=max_tokens,
-            )
-            logger.info(f"LLM provider {provider_name} succeeded")
-            return result
-        except Exception as e:
-            last_error = e
-            logger.warning(f"LLM provider {provider_name} failed: {e}")
-            continue
+            try:
+                logger.info(f"Trying LLM provider: {provider_name}")
+                result = await provider_fn(
+                    messages=messages,
+                    temperature=temperature,
+                    max_tokens=max_tokens,
+                )
+                logger.info(f"LLM provider {provider_name} succeeded")
+                return result
+            except Exception as e:
+                last_error = e
+                logger.warning(f"LLM provider {provider_name} failed: {e}")
+                continue
 
-    raise RuntimeError(
-        f"All LLM providers failed. Last error: {last_error}"
-    )
+        raise RuntimeError(
+            f"All LLM providers failed. Last error: {last_error}"
+        )
 
 
 async def check_provider_health() -> dict[str, bool]:

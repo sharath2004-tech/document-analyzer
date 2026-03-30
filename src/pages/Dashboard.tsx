@@ -201,15 +201,21 @@ export default function Dashboard() {
                   </div>
                   <div className="flex justify-between text-sm">
                     <span className="text-muted-foreground">Concepts Learned</span>
-                    <span className="font-medium text-foreground">86</span>
+                    <span className="font-medium text-foreground">
+                      {documents.reduce((sum, d) => sum + (d.concept_count ?? 0), 0)}
+                    </span>
                   </div>
                   <div className="flex justify-between text-sm">
-                    <span className="text-muted-foreground">Questions Asked</span>
-                    <span className="font-medium text-foreground">42</span>
+                    <span className="text-muted-foreground">Pages Analyzed</span>
+                    <span className="font-medium text-foreground">
+                      {documents.reduce((sum, d) => sum + (d.pages ?? 0), 0)}
+                    </span>
                   </div>
                   <div className="flex justify-between text-sm">
-                    <span className="text-muted-foreground">Study Time</span>
-                    <span className="font-medium text-foreground">12.5 hrs</span>
+                    <span className="text-muted-foreground">Ready Documents</span>
+                    <span className="font-medium text-foreground">
+                      {documents.filter(d => d.status === 'ready').length}
+                    </span>
                   </div>
                 </div>
               </div>

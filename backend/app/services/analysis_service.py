@@ -2,6 +2,7 @@
 
 import json
 import logging
+import asyncio
 import uuid
 from app.services.llm_service import call_llm
 from app.services.pdf_service import extract_text_from_pdf, chunk_text
@@ -54,11 +55,13 @@ async def analyze_document(file_path: str) -> dict:
     # Use first chunks (up to ~8000 chars) for analysis
     analysis_text = "\n\n".join(c["text"] for c in chunks[:4])
 
-    # Step 3: Run all analyses
-    summary_result = await generate_summaries(analysis_text)
-    concepts_result = await extract_concepts(analysis_text)
-    bloom_result = await analyze_bloom_taxonomy(analysis_text)
-    insights_result = await generate_insights(analysis_text)
+    # Step 3: Run all analyses in parallel
+    summary_result, concepts_result, bloom_result, insights_result = await asyncio.gather(
+        generate_summaries(analysis_text),
+        extract_concepts(analysis_text),
+        analyze_bloom_taxonomy(analysis_text),
+        generate_insights(analysis_text),
+    )
 
     return {
         "pages": pdf_data["pages"],
@@ -72,16 +75,17 @@ async def analyze_document(file_path: str) -> dict:
 
 async def generate_summaries(text: str) -> dict:
     """Generate brief, detailed, and exam note summaries."""
-    results = {}
-    for stype in ["brief", "detailed", "exam_notes"]:
+    async def _gen(stype: str) -> tuple[str, str]:
         try:
             messages = summarize_prompt(text, stype)
             result = await call_llm(messages, temperature=0.3)
-            results[stype] = result.strip()
+            return stype, result.strip()
         except Exception as e:
             logger.error(f"Summary generation ({stype}) failed: {e}")
-            results[stype] = f"Summary generation failed: {str(e)}"
-    return results
+            return stype, f"Summary generation failed: {str(e)}"
+
+    pairs = await asyncio.gather(*[_gen(s) for s in ["brief", "detailed", "exam_notes"]])
+    return dict(pairs)
 
 
 async def extract_concepts(text: str) -> list[dict]:

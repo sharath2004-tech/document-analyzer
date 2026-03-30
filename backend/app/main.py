@@ -9,6 +9,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.config import settings
 from app.routers import auth, documents, analysis
 from app.services.llm_service import check_provider_health
+from app.database import get_client, close_db
 
 logging.basicConfig(
     level=logging.INFO,
@@ -22,7 +23,13 @@ async def lifespan(app: FastAPI):
     logger.info("Starting Document Analyzer API")
     logger.info(f"LLM priority: {settings.LLM_PRIORITY}")
     logger.info(f"Upload directory: {settings.UPLOAD_DIR}")
+    # Init MongoDB connection and ensure indexes
+    db = get_client()[settings.MONGODB_DB_NAME]
+    await db["users"].create_index("email", unique=True)
+    await db["documents"].create_index("user_id")
+    logger.info("MongoDB connected and indexes ensured")
     yield
+    await close_db()
     logger.info("Shutting down Document Analyzer API")
 
 
