@@ -22,7 +22,9 @@ import {
     TrendingUp
 } from 'lucide-react';
 import { useEffect, useState } from 'react';
+import ReactMarkdown from 'react-markdown';
 import { useParams } from 'react-router-dom';
+import remarkGfm from 'remark-gfm';
 
 const bloomColors = {
   remember: 'bg-bloom-remember',
@@ -247,10 +249,10 @@ export default function Analyze() {
                         </Button>
                       </div>
                     </div>
-                    <div className="prose prose-sm max-w-none text-foreground">
-                      <div className="whitespace-pre-wrap font-sans text-sm leading-relaxed">
+                    <div className="prose prose-sm max-w-none text-foreground dark:prose-invert">
+                      <ReactMarkdown remarkPlugins={[remarkGfm]}>
                         {summaryData[activeSummaryType]}
-                      </div>
+                      </ReactMarkdown>
                     </div>
                   </div>
                 </>
@@ -278,7 +280,11 @@ export default function Analyze() {
                       {/* Answer */}
                       <div className="flex justify-start">
                         <div className="bg-muted rounded-2xl rounded-bl-md px-4 py-3 max-w-[80%]">
-                          <p className="text-sm text-foreground">{item.answer}</p>
+                          <div className="prose prose-sm max-w-none text-foreground dark:prose-invert">
+                            <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                              {item.answer}
+                            </ReactMarkdown>
+                          </div>
                           {item.sources && item.sources.length > 0 && (
                             <div className="mt-3 flex flex-wrap gap-2">
                               {item.sources.map((source: string, i: number) => (
