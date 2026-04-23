@@ -107,7 +107,7 @@ class BloomItemOut(BaseModel):
     level: BloomLevel
     concepts: list[str]
     questions: list[str]
-    percentage: float
+    percentage: float = 0.0
 
 
 class InsightType(str, Enum):

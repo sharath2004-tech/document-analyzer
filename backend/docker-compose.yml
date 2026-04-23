@@ -6,13 +6,28 @@ services:
       - "8000:8000"
     env_file:
       - .env
+    environment:
+      # Override .env values so docker networking works inside compose
+      - MONGODB_URI=mongodb://mongodb:27017
+      - OLLAMA_BASE_URL=http://ollama:11434
+      - LLM_PRIORITY=ollama
     volumes:
       - ./uploads:/app/uploads
     depends_on:
+      - mongodb
       - ollama
     restart: unless-stopped
 
-  # Ollama for local LLM fallback
+  # MongoDB (local, no Atlas needed)
+  mongodb:
+    image: mongo:7
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongodb_data:/data/db
+    restart: unless-stopped
+
+  # Ollama for local LLM inference
   ollama:
     image: ollama/ollama:latest
     ports:
@@ -25,16 +40,17 @@ services:
         reservations:
           memory: 4G
 
-  # Auto-pull phi3 model on startup
+  # Auto-pull llama3.1 model on first startup
   ollama-init:
     image: ollama/ollama:latest
     depends_on:
       - ollama
     entrypoint: >
-      sh -c "sleep 10 && ollama pull phi3"
+      sh -c "sleep 10 && ollama pull llama3.1:latest"
     environment:
       - OLLAMA_HOST=ollama:11434
     restart: "no"
 
 volumes:
+  mongodb_data:
   ollama_data:
